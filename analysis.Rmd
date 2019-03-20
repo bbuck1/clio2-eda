@@ -1,0 +1,168 @@
+---
+title: "analysis.Rmd"
+author: "Brandan P. Buck"
+date: "March 19, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(scales) 
+library(ggplot2)
+library(readr)
+
+sinking_data<- read.csv("C:/Users/bpbuc/Documents/Brandan's Stuff/_PhD Stuff/CILO II/R_projects/cilo2-eda/data/japanese_merchant_fleet_sinkings_simplified_v2.csv", header = TRUE, sep = ",")
+sinking_agents_complete<- read.csv("C:/Users/bpbuc/Documents/Brandan's Stuff/_PhD Stuff/CILO II/R_projects/cilo2-eda/data/japanese_merchant_vessel_sinking_agent_v1.csv", header = TRUE, sep = ",")
+```
+
+```{r}
+
+#The data explored in this document was transcribed during a CILO I project that I was a part of. It is sinking data of Japanese merchant vessels sunk by the Allies during WWII compiled the The Joint Army-Navy Assessment Committee
+
+#"Japanese Naval and Merchant Shipping Losses During World War II by All Causes”
+#https://www.history.navy.mil/research/library/online-reading-room/title-list-alphabetically/j/japanese-naval-merchant-shipping-losses-wwii.html#pageiv 
+
+#The data has 11 columns. For our analysis, of most interest to us will be the date, type, tonnage, and sinking_agent.
+
+summary(sinking_data)
+
+```
+```{r}
+
+#Shipping is usually measured in tonnage, rather than the counting of individual vessels. This distinction will become important late on. Looking at mean, max, min, and sum we can see that the smallest vessel in the data set is a mere 6 tons. This record is likely an error. The largest vessel, the Tonan Maru No. 2 was a tanker vessel...so its tonnage is likely accurate.
+
+mean(sinking_data$tonnage)
+max(sinking_data$tonnage)
+min(sinking_data$tonnage)
+sum(sinking_data$tonnage)
+
+sinking_data %>% 
+  select(name, type, tonnage) %>% 
+  filter(tonnage == "19262")
+
+```
+```{r}
+#Looking at the "type" column we see that there are 22 different vessel types. Arranging by total tonnage we see that “cargo”, “passenger-cargo” and “tanker” are in the top three. Analyzing the data at large through vessel type may not prove effective as there is a great variance of tonnage levels for the various ship types and a large number of types themselves. Tankers however will be a valuable as despite differences in tonnage, tankers serve the same function, to haul oil
+
+sinking_data %>% 
+  group_by(type) %>% 
+  summarize(amount= n(),
+  total_tonnage_lost= sum(tonnage),
+  avg_tonnage_per_ship= sum(tonnage) / n()) %>% 
+  arrange(desc(total_tonnage_lost))
+
+sinking_data$date<-as.Date(sinking_data$date, '%Y-%m-%d')
+
+sinking_data %>% 
+filter(type == "tanker") %>% 
+  group_by(month= floor_date(date, "month"),
+           sinking_agent) %>%
+  summarize(num = (id_no = n()),
+            sum_tonnage = sum(tonnage),
+            avg_tonnage_per_ship = sum_tonnage / num) %>% 
+  arrange(desc(sum_tonnage))
+
+```
+
+``` {r}
+
+#Shipping is usually measured in tonnage, rather than the counting of individual vessels. This distinction will become important late on. Looking at mean, max, min, and sum we can see that the smallest vessel in the data set is a mere 6 tons. This record is likely an error. The largest vessel, the Tonan Maru No. 2 was a tanker vessel...so its tonnage is likely accurate.
+#Analyzing the “sinking_agent” column is more straightforward. The items here have been simplified by me to only six observations. Organizing by “total_tonnage_lost” we see that submarines sunk the most tonnage and highest number of merchant vessels
+
+sinking_data %>% 
+  group_by(sinking_agent) %>% 
+  summarize(amount= n(),
+  total_tonnage_lost= sum(tonnage),
+  avg_tonnage_per_ship= sum(tonnage) / n()) %>% 
+  arrange(desc(total_tonnage_lost))
+
+
+```
+
+```{r}
+
+#Looking at these tonnage totals, via year and across all vessel types and all sinking types we see a general trend. 1944 was the highest year by far for both number and total tonnage. A trend of note between 1944 was 28% decrease in number but a 45% decline the sum of total tonnage. The key to this discrepancy is the drop in average tonnage between 1944 and 1945, 4105 and 2566, respectively. Several trends can explain this. By 1945 the Allies were essentially running out large vessels to sink, war planners focused on closing the small, coastal waterways and local shipping lanes which connected the Japanese Home Islands. 
+
+sinking_data %>% 
+  group_by(year) %>% 
+  summarize(amount= n(),
+  total_tonnage_lost= sum(tonnage),
+  avg_tonnage_per_ship= sum(tonnage) / n())
+
+```
+
+## Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+
+#Plotting this the average tonnage per month we can visualize this trend. The rapid decline is January resulted from the South China Sea raid which effectively cut Japan off from its overseas possessions. That slight bump in August 1945 represents the beginning of the Allied blockade of the Japanese Home Islands and the interdiction the final large vessels which operated on shipping lanes to China/Korea. The remaining points represent the significant smaller vessels which operated in Japanese coastal water ways. 
+
+sinking_data$date<-as.Date(sinking_data$date, '%Y-%m-%d')
+
+sinking_data %>% 
+  group_by(month= floor_date(date, "month"))  %>% 
+  summarize(amount= n(),
+  total_tonnage_lost= sum(tonnage),
+  avg_tonnage_per_ship= sum(tonnage) / n()) %>% 
+  ggplot(aes(x= month, y= avg_tonnage_per_ship)) + geom_line() + geom_point() + 
+  labs(title = "Tonnage of Average Vessel Sunk, By Month",
+       x= "Year",
+       y= "Tonnage")
+
+```
+```{r}
+
+#Plotting total tonnage by sinking agent, by month we can see the different trends over time and visualization the pace and components of the war. Aircraft sunk high tonnage totals at relatively few times during the war, usually during major offensive operations. Submarines engaged in a war of attrition that plotted on a fairly “normal” distribution. However, the individual peaks and valleys cannot be explained by this data alone. Mines come high use late in the war during, what was then known as “Operation Starvation.  
+
+sinking_data$date<-as.Date(sinking_data$date, '%Y-%m-%d')
+
+sinking_data %>% 
+  select(id_no, date, tonnage, sinking_agent, year) %>% 
+  filter(year > 1941,
+         sinking_agent == "submarine" 
+         | sinking_agent == "aircraft"
+         | sinking_agent == "mine"
+         | sinking_agent == "surface_craft") %>%
+  group_by(month= floor_date(date, "month"),
+           sinking_agent) %>%
+  summarize(total_ton= sum(tonnage),
+            amount= n(),
+            avg_ton_per_ship= sum(tonnage) / n()) %>% 
+ggplot(aes(x= month, y= total_ton, color= sinking_agent)) + geom_line(size= 1)+ geom_point(size= 3) + 
+  labs(title = "Total Tonnage of Vessels Sunk By Sinking Agent, By Month",
+      x= "Year",
+      y= "Total Tonnage of Sunken Vessels",
+      color= "Sinking Agent") +
+  scale_color_manual(labels = c("Aircraft", "Mine", "Submarine", "Surface Craft"), 
+                     values = c("red", "green", "blue", "purple"))
+
+```
+
+```{r}
+#The original data set was not tidy. Some vessels were sunk my multiple sinking agents, and as such have multiple observations per rows. To clean up the data and to afford maximum flexibility I created a second .csv with just the sinking agents and the id_no of vessels that they sunk. Using a left join we can leverage that second csv in our analysis to get a more complex picture on the use of airpower in the campaign. A cursory look at the data shows that carrier based naval aircraft constituted the overwhelming majority of sinking events and is the source of the major spikes in activity. On the whole, U.S. Army Air Force had a limited impact on the campaign, but prior to February 1944 their constituted the clear majority of the air campaign.
+
+sinking_data %>% 
+  left_join(sinking_agents_complete, by = "id_no") %>% 
+  filter(year > 1941,
+         sinking_agents != "submarine",
+         sinking_agents != "army_mine",
+         sinking_agents != "mine",
+         sinking_agents != "surface_craft",
+         sinking_agents != "unknown",
+         sinking_agents != "sabotage",
+         sinking_agents != "navy_mine") %>% 
+  group_by(month= floor_date(date, "month"),
+           sinking_agents) %>% 
+  summarize(total_ton= sum(tonnage),
+            amount= n(),
+            avg_ton_per_ship= sum(tonnage) / n()) %>% 
+ggplot(aes(x= month, y= total_ton, color= sinking_agents)) + geom_line() +geom_point(size= 2)
+
+
+```
